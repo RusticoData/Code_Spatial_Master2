@@ -1,0 +1,209 @@
+
+install.packages("rgdal")
+library(rgdal)
+install.packages("dplyr")
+library(dplyr)
+install.packages("tmap")
+library(tmap)
+install.packages("maptools")
+library(maptools)
+install.packages("ggplot2")
+library(ggplot2)
+install.packages("sf")
+library(sf)
+install.packages("sp")
+library(sp)
+install.packages("stringr")
+library(stringr)
+install.packages("readxl")
+library(readxl)
+install.packages("FactoMineR")
+library(FactoMineR) 
+install.packages("tidyr")
+library(tidyr)
+install.packages("forcats")
+library(forcats)
+install.packages("GGally")
+library(GGally)
+install.packages("factoextra")
+library(factoextra)
+install.packages("openxlsx")
+library(openxlsx)
+install.packages("corrplot")
+library(corrplot)
+install.packages("cowplot")
+library(cowplot)
+install.packages("cartography")
+library(cartography)
+install.packages("lubridate")
+library(lubridate)
+
+library(rgdal)
+library(dplyr)
+library(tmap)
+library(maptools)
+library(ggplot2)
+library(sf)
+library(sp)
+library(stringr)
+library(readxl)
+library(FactoMineR)  
+library(tidyr)
+library(forcats)
+library(ggplot2)
+library(GGally)
+library(factoextra)
+library(openxlsx)
+library(corrplot)
+library(cowplot)
+library(cartography)
+library(lubridate)
+
+knitr::opts_chunk$set(echo = TRUE)
+
+# Importing data
+
+##Shapefile par commune
+
+my_spdf=readOGR("C:/Users/HP/Documents/data",'976_Commune', verbose=F) ###
+
+my_spdf_sf=st_read("C:/Users/HP/Documents/data",'976_Commune',quiet = FALSE)
+
+Dengue=read.xlsx("dengue_clean.xlsx",sheet=1, colNames = TRUE)
+Dengue$Date_Arriv <- as.Date(Dengue$Date_Arriv, origin = "01-01-1970")
+Dengue$Week=week(Dengue$Date_Arriv)
+
+Dengue$case=1
+Dengue_sf=st_as_sf(Dengue, coords = c("X","Y"),
+                   crs= "+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0")
+Dengue_sf=st_transform(Dengue_sf, crs = st_crs(my_spdf_sf))
+Dengue_sf=cbind(Dengue_sf, st_coordinates(st_centroid(my_spdf_sf$geometry)))
+
+sp_sum <- function(x){
+  if (all(is.na(x))){
+    return(NA)
+  } else {
+    sum(x, na.rm = TRUE)
+  }
+}
+
+
+Dengue = Dengue %>%
+  select(case,commune,village,Date_Arriv, Week,X,Y,Date) %>%
+  mutate(Year = year(Date),
+  Month = lubridate::month(Date))%>%
+  group_by(Date, village, commune,case,X,Y,Week,Date_Arriv) %>%
+  summarise(case = sp_sum(case), .groups = "drop")
+
+write.xlsx(Dengue, "Dengue.xlsx")
+
+
+## Visualisation des points
+
+
+ggplot(data = my_spdf_sf) +geom_sf()+ geom_point(data=Dengue, aes(x=X, y=Y,col=case),size=1)+scale_color_viridis_c()
+
+ggplot(data = my_spdf_sf) +geom_sf() + geom_point(data=Dengue, aes(x=X, y=Y,col=case),size=1) + facet_wrap(~Week) + theme_bw()
+
+ggplot(aes(X, Y, col =Week),data = Dengue) + geom_point() + theme_bw()
+
+ggplot(data = my_spdf_sf) +geom_sf() +geom_point(data=Dengue, aes(x=X, y=Y),size=1) + theme_bw()
+
+ggplot(data = my_spdf_sf) +geom_sf()+geom_point(data=Dengue_sf, aes(x=X, y=Y),size=1)+xlab("Longitude")+ ylab("Latitude")
+
+table(Dengue_sf$commune)
+
+
+Nom_Commune1<- c("DZAOUDZI","PAMANDZI","ACOUA","MAMOUDZOU","DEMBENI",
+                 "BOUENI","KANI-KELI","CHIRONGUI","BANDRELE","BANDRABOUA", "KOUNGOU","MTSANGAMOUJI", "TSINGONI", "CHICONI","OUANGANI","SADA", "MTSAMBORO")
+
+my_spdf_sf$commune<- Nom_Commune1
+
+my_spdf_sf$Total_cas=c(330,206,111,1205,118,183,142,232,218,361,445,91,103,107,83,155,398)
+
+
+DB_SOCIO_INSEE<-read_excel("DB_SOCIO_INSEE.xlsx")
+
+INSEE<- DB_SOCIO_INSEE[,c(1:8)] # caracteristiques socidemographiques
+
+New_INSEE=INSEE[c(8,15,1,11,7,4,9,6,3,2,10,13,17,5,14,16,12),]
+
+New_INSEE$Nom_Commune=Nom_Commune1
+
+Insee=New_INSEE[,-1]
+
+Insee$Pop_Total<- rowSums(Insee) # effectif par commune dans l'orde du shapefile
+
+Total_Popul<- sum(Insee$Pop_Total) # population total
+
+
+##cas pour 1000 habitants
+my_spdf_sf$Total_cas_2= 1000*(my_spdf_sf$Total_cas/Insee$Pop_Total)
+IS
+choroLayer(spdf =my_spdf_sf, var = "Total_cas_2", lwd=2, legend.pos = "topright",legend.title.txt ="Ratio",col = carto.pal(pal1 = "orange.pal", n1 = 4),border = "black", breaks = c(7,10,20,30,52))
+layoutLayer(title= "Cas Dengue pour 1000 Habitants", col="skyblue",
+            author = "� Uriel", sources = "", scale = NULL, north = FALSE)
+
+
+#moyenne par commune
+my_spdf_sf$moyenne_commune= 1/52*sum()
+
+# base mamoudzou
+ 
+Dengue_Mamoudzou = subset(Dengue, commune=="MAMOUDZOU")
+moyenne_mamoudzou = 1/52*sum(Dengue_Mamoudzou$case)
+
+Dengue_commune = Dengue %>%
+  select(case,commune,Week) %>%
+  group_by(commune, Week) %>%
+  summarise(case = sp_sum(case), .groups = "drop")
+
+moyenne_commune = Dengue %>%
+  select(case,commune) %>%
+  group_by(commune, case) %>%
+  summarise(mean_spatial = 1/52*sp_sum(Dengue$case), .groups = "drop")
+
+# Repr�sentation spatiale de la moyenne empirique spatiale mu
+
+my_spdf_sf$mean_spatial= moyenne_commune$mean_spatial
+
+choroLayer(spdf =my_spdf_sf, var = "mean_spatial", lwd=2, legend.pos = "topright",legend.title.txt ="Spatial_mean",col = carto.pal(pal1 = "orange.pal", n1 = 4),border = "black", breaks = c(1.5,2.5,3.5,5,24))
+layoutLayer(title= "Moyenne empirique spatiale", col="skyblue", author = "� Uriel alanmenou", sources = "", scale = NULL, north = FALSE)
+
+# Repr�sentation temporelle de la moyenne empirique
+
+moyenne_hebdomadaire = Dengue %>%
+  select(case,commune, Week) %>%
+  group_by(Week) %>%
+  summarise(mean_hebdo = 1/17*sp_sum(case), .groups = "drop")
+
+ggplot(moyenne_hebdomadaire, aes(Week, mean_hebdo)) + 
+  geom_bar(stat = "identity", color = "black", fill = "red")+ 
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Repr�sentation temporelle de la moyenne ")
+
+
+## Affichage par rapport au village et communes
+
+
+shp_path <- "C:/Users/HP/Documents/data/"    ### Ta direction
+myt_map <- read_sf(paste0(shp_path, "976_Village.shp")) %>%
+  mutate(commune = ifelse(commune %in% c("BOUENI", "BOUNENI"), "BOUENI", commune),
+         village = gsub("Mtzamboro", "Mtsamboro", village))
+
+library(stringr)
+
+myt_map_commune <- read_sf(paste0(shp_path, "976_Commune.shp")) %>%
+  mutate(commune = str_replace(pattern = "\xe9", replacement = "e", string = commune),
+         commune = ifelse(commune == "Bandrel???", "Bandrele", commune) %>% toupper() %>% as.factor())
+
+
+myt_mapOGR <- readOGR(paste0(shp_path, "976_Commune.shp"), verbose = F)
+myt_mapOGR@data <- myt_mapOGR@data %>%
+  mutate(commune = str_replace(pattern = "\xe9", replacement = "e", commune),
+         commune = ifelse(commune == "BOUNENI", "BOUENI", commune),
+         commune = ifelse(commune == "Bandrel???", "Bandrele", commune) %>% toupper() %>% as.factor())
+
+### Attention: myt_map (le nom du shapefile par village)
+
+### myt_map_commune (le nom du shapefile par commune appel� myspedf..)
